@@ -26,7 +26,6 @@ export const usage = `## 使用
 ## QQ 群
 956758505
 `;
-
 export interface Config {
   atReply: boolean;
   quoteReply: boolean;
@@ -38,16 +37,27 @@ export interface Config {
   currencyName: string;
 }
 
-export const Config: Schema<Config> = Schema.object({
-  enableMonetary: Schema.boolean().default(false).description("开启金币系统(需要 monetary 服务)"),
-  currencyName: Schema.string().default("default").description("货币名称"),
-  waitTimeout: Schema.number().default(10).description("等待玩家加入的时间(秒)"),
-  entryKeyword: Schema.string().default("1").description("加入游戏的指令暗号(仅娱乐模式)"),
-  quickMode: Schema.boolean().default(false).description("快速模式：开启后直接显示所有结果，不逐个发牌"),
-  dealInterval: Schema.number().default(2000).description("发牌展示间隔(毫秒，关闭快速模式时有效)"),
-  atReply: Schema.boolean().default(false).description("响应时 @"),
-  quoteReply: Schema.boolean().default(true).description("响应时引用"),
-});
+export const Config: Schema<Config> = Schema.intersect([
+  Schema.object({
+    enableMonetary: Schema.boolean().default(false).description("开启金币系统(需要 monetary 服务)"),
+    currencyName: Schema.string().default("default").description("货币名称"),
+  }).description("货币设置"),
+
+  Schema.object({
+    waitTimeout: Schema.number().default(10).description("等待玩家加入的时间(秒)"),
+    entryKeyword: Schema.string().default("1").description("加入游戏的指令暗号(仅娱乐模式)"),
+  }).description("游戏设置"),
+
+  Schema.object({
+    quickMode: Schema.boolean().default(false).description("快速模式：开启后直接显示所有结果，不逐个发牌"),
+    dealInterval: Schema.number().default(2000).description("发牌展示间隔(毫秒，关闭快速模式时有效)"),
+  }).description("显示设置"),
+
+  Schema.object({
+    atReply: Schema.boolean().default(false).description("响应时 @"),
+    quoteReply: Schema.boolean().default(true).description("响应时引用"),
+  }).description("消息设置"),
+]);
 
 // 数据库表扩充
 declare module "koishi" {
@@ -406,18 +416,18 @@ export function apply(ctx: Context, cfg: Config) {
     // 3. 发牌并计算
     const playerResults: BullCardPlayers[] = [];
 
-    for (const uid of allParticipants) {
+    for (const userId of allParticipants) {
       // 确定名字
-      let uName = uid;
+      let uName = userId;
       let bet = 0;
 
-      if (uid === session.bot.userId) {
+      if (userId === session.bot.userId) {
           uName = `👑 庄家 (${session.bot.user?.name || 'Bot'})`;
       } else {
           // 玩家
-          const rankData = (await ctx.database.get("bull_card_rank", { userId: uid }))[0];
-          uName = rankData?.userName || uid;
-          bet = game.bets?.[uid] || 0;
+          const rankData = (await ctx.database.get("bull_card_rank", { userId: userId }))[0];
+          uName = rankData?.userName || userId;
+          bet = game.bets?.[userId] || 0;
       }
 
       // 发5张
@@ -431,7 +441,7 @@ export function apply(ctx: Context, cfg: Config) {
 
       const pData: BullCardPlayers = {
         channelId,
-        userId: uid,
+        userId,
         userName: uName,
         hand,
         resultScore: scoreValue,
