@@ -3,8 +3,6 @@
 [![github](https://img.shields.io/badge/github-araea/bull_card-8da0cb?style=for-the-badge&labelColor=555555&logo=github)](https://github.com/araea/koishi-plugin-bull-card)
 [![npm](https://img.shields.io/npm/v/koishi-plugin-bull-card.svg?style=for-the-badge&color=fc8d62&logo=npm)](https://www.npmjs.com/package/koishi-plugin-bull-card)
 
-## 介绍
-
 Koishi 的斗牛纸牌游戏插件。
 
 ## 使用
@@ -41,7 +39,9 @@ Koishi 的斗牛纸牌游戏插件。
 
 ## QQ 群
 
-956758505
+- 956758505
+
+---
 
 ## License
 
