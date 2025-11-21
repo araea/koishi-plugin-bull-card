@@ -1,19 +1,29 @@
 {
-  "name": "koishi-plugin-bull-card-game",
+  "name": "koishi-plugin-bull-card",
   "description": "Koishi 的斗牛纸牌游戏插件。",
-  "version": "1.0.5",
+  "version": "1.0.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
     "dist"
   ],
-  "license": "MIT",
+  "koishi": {
+    "service": {
+      "required": [
+        "database"
+      ],
+      "optional": [
+        "monetary"
+      ]
+    }
+  },
+  "license": "MIT OR Apache-2.0",
   "author": "Nawyjx <3373167460@qq.com>",
-  "homepage": "https://www.npmjs.com/package/koishi-plugin-bull-card-game?activeTab=readme",
+  "homepage": "https://www.npmjs.com/package/koishi-plugin-bull-card?activeTab=readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/araea/koishi-plugin-bull-card-game.git"
+    "url": "git+https://github.com/araea/koishi-plugin-bull-card.git"
   },
   "keywords": [
     "chatbot",
@@ -28,6 +38,6 @@
     "牛牛"
   ],
   "peerDependencies": {
-    "koishi": "^4.14.1"
+    "koishi": "^4.18.9"
   }
 }

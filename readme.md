@@ -1,42 +1,50 @@
-# koishi-plugin-bull-card-game
+# koishi-plugin-bull-card
 
-[![npm](https://img.shields.io/npm/v/koishi-plugin-bull-card-game?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-bull-card-game)
+[![github](https://img.shields.io/badge/github-araea/bull_card-8da0cb?style=for-the-badge&labelColor=555555&logo=github)](https://github.com/araea/koishi-plugin-bull-card)
+[![npm](https://img.shields.io/npm/v/koishi-plugin-bull-card.svg?style=for-the-badge&color=fc8d62&logo=npm)](https://www.npmjs.com/package/koishi-plugin-bull-card)
 
 ## 介绍
 
-Koishi 的斗牛纸牌游戏插件。
+Koishi 的斗牛纸牌游戏插件
 
 ## 使用
 
-1. 设置指令别名。
+- 发送指令 \`bullCard\` 查看帮助。
+- 发送指令 \`bullcard.来一局\` 即可发起游戏。
+- 其他玩家在规定时间内发送设置的暗号（默认 \`1\`）即可加入。
+- 时间到后自动开始、发牌、结算。
 
 ## 游戏规则
 
-- 每个玩家需拿五张牌，根据牌面计算结果。
-- 开始时，先给每个玩家发三张牌，然后轮流要牌，直到手上有五张牌为止。
-- 结束时，比较结果，最大的玩家获胜。如果有多个玩家结果相同，则比较最大的一张牌的大小。
-- 积分系统：每局游戏的胜者获得 (玩家人数 - 胜者人数) / 胜者人数 分，每局游戏的败者扣除 1 分。
+-   每局五张牌，根据牌面计算结果
+-   开局发三张，轮流要牌至五张
+-   结果最大者胜，同分比最大单牌
 
 ## 牌面计算
 
-- 牌面计算：从五张牌中任意选出三张牌，使其点数之和为 10 的倍数，剩余两张牌的点数之和除以 10 取余数即为结果。
-- 牌面计算时，JQK 按 10 算，A 按 1 算。
-- 如果剩余两张牌的点数之和也是 10 的倍数，则结果为 10（称为“牛牛”），否则按照余数计算（称为“牛几”），例如余数为 9，则结果为 9（称为“牛九”）。
-- 如果五张牌中没有任何三张牌可以组成 10 的倍数，则结果为 0（称为“没牛”）。
-- 特殊情况：
-  - 如果五张牌中有四张相同的点数，则结果为 11（称为“四炸”）。
-  - 如果五张牌都是 JQK，则结果为 12（称为“五花牛”）。
-  - 如果五张牌都小于等于 5，并且点数之和小于等于 10，则结果为 13（称为“五小牛”）。
+-   任选三张和为 10 的倍数，剩余两张和取余 10 为结果
+-   JQK 计 10，A 计 1
+-   剩余两张和亦为 10 倍数：结果 10（牛牛）
+-   余数非零：按余数计（牛几）
+-   无三张可组 10 倍数：结果 0（没牛）
+
+特殊情况：
+
+-   四张同点：结果 11（四炸）
+-   全为 JQK：结果 12（五花牛）
+-   全 <5 且和 ≤10：结果 13（五小牛）
 
 ## 致谢
 
-* [Koishi](https://koishi.chat/) - 机器人框架
-* [欢乐斗牛](https://baike.baidu.com/item/%E6%AC%A2%E4%B9%90%E6%96%97%E7%89%9B/7961223) - 规则
+-   [Koishi](https://koishi.chat/) - 机器人框架
+-   [欢乐斗牛](https://baike.baidu.com/item/%E6%AC%A2%E4%B9%90%E6%96%97%E7%89%9B/7961223) - 规则
 
 ## QQ 群
 
-- 956758505
+956758505
 
 ## License
 
-MIT License © 2024
+_Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option._
+
+_Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this crate by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions._
