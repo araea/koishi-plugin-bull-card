@@ -12,7 +12,7 @@ export const usage = `## 使用
 
 - 发送指令 \`bullCard\` 查看帮助。
 - 发送指令 \`来一局\` 即可发起游戏。
-- **娱乐模式**：发送设置的暗号（默认 \`1\`）加入。
+- **娱乐模式**：发送设置的暗号（默认 \`1\`）加入。若只有一人加入，Bot 会自动下场陪练。
 - **金币模式（需要 monetary 服务）**：发送 \`下注金额\`（数字）加入。
 - 时间到后自动开始、发牌、结算。
 
@@ -269,7 +269,7 @@ export function apply(ctx: Context, cfg: Config) {
         `• bullCard.强制结束 - 强制重置（退还赌注）\n\n` +
         (cfg.enableMonetary ?
         `💰 规则：Bot作为庄家，玩家下注后与Bot比牌。\n若玩家赢，获得本金 + 赌注 x 牌型倍率。\n` :
-        `📋 规则：玩家之间互相比牌，最大者胜。\n`) +
+        `📋 规则：玩家之间互相比牌，最大者胜。\n📢 提示：若只有一人参与，Bot 将作为庄家陪练。\n`) +
         `\n🎴 牌面计算规则：\n` +
         `• 每局五张牌，任选三张和为10的倍数\n` +
         `• 剩余两张和取余10为结果（牛几）\n` +
@@ -386,12 +386,10 @@ export function apply(ctx: Context, cfg: Config) {
     if (!game || game.state !== GameState.RECRUITING) return;
 
     const members = game.members;
-    // 金币模式下至少1人即可（因为和Bot玩）；娱乐模式需要2人
-    const minPlayers = cfg.enableMonetary ? 1 : 2;
-
-    if (members.length < minPlayers) {
-      await sendMsg(session, `👥 人数不足 ${minPlayers} 人，游戏取消。`);
-      await resetGame(session.platform,channelId); // 自动退款
+    // 只要有至少1人即可开始（1人时bot加入）
+    if (members.length === 0) {
+      await sendMsg(session, `👥 无人参与，游戏取消。`);
+      await resetGame(session.platform,channelId);
       return;
     }
 
@@ -400,12 +398,20 @@ export function apply(ctx: Context, cfg: Config) {
 
     // 确定所有参与者 ID
     let allParticipants = [...members];
+
     if (cfg.enableMonetary) {
-        // 金币模式添加 Bot 庄家
+        // 金币模式: 强制添加 Bot 庄家
         allParticipants.push(session.bot.userId);
+    } else {
+        // 娱乐模式:
+        // 如果只有一个人，Bot 强制加入陪玩
+        if (members.length === 1) {
+            allParticipants.push(session.bot.userId);
+            await sendMsg(session, `🤖 检测到只有一位玩家，Bot 决定作为庄家陪你玩一把！`);
+        }
     }
 
-    await sendMsg(session, `⏰ 截止！共 ${members.length} 人参与，正在发牌...`);
+    await sendMsg(session, `⏰ 截止！共 ${members.length} 人参与${allParticipants.includes(session.bot.userId) && members.length > 0 ? " (+Bot)" : ""}，正在发牌...`);
 
     // 1. 准备牌堆
     const deck = createShuffledDeck(allParticipants.length > 5 ? 4 : 2);
@@ -469,8 +475,10 @@ export function apply(ctx: Context, cfg: Config) {
 
     // 5. 结算
     if (cfg.enableMonetary) {
+        // 金币模式结算
         await handleMonetarySettlement(session, playerResults);
     } else {
+        // 娱乐模式结算 (PVP 或 1v1 Bot)
         await handleNormalSettlement(session, playerResults);
     }
 
@@ -493,15 +501,19 @@ export function apply(ctx: Context, cfg: Config) {
 
     // 更新胜负
     for (const w of winners) {
+      // 不记录 Bot 的胜负
+      if (w.userId === session.bot.userId) continue;
       const r = (await ctx.database.get("bull_card_rank", { userId: w.userId }))[0];
       if (r) await ctx.database.set("bull_card_rank", { userId: w.userId }, { wins: r.wins + 1 });
     }
     for (const l of losers) {
+        // 不记录 Bot 的胜负
+        if (l.userId === session.bot.userId) continue;
         const r = (await ctx.database.get("bull_card_rank", { userId: l.userId }))[0];
         if (r) await ctx.database.set("bull_card_rank", { userId: l.userId }, { losses: r.losses + 1 });
     }
 
-    const winnerNames = winners.map(w => h.at(w.userId)).join(" ");
+    const winnerNames = winners.map(w => w.userId === session.bot.userId ? w.userName : h.at(w.userId)).join(" ");
     await sendMsg(session,
         `🎉 最终胜者：${winnerNames}${h("p", "")} ` +
         `牌型：${topP.resultName} (${topP.maxCard.suit}${topP.maxCard.rank})`
