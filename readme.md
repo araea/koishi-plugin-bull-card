@@ -70,8 +70,8 @@ Koishi 的斗牛纸牌游戏插件。
 
 ## 致谢
 
--   [Koishi](https://koishi.chat/) - 机器人框架
--   [欢乐斗牛](https://baike.baidu.com/item/%E6%AC%A2%E4%B9%90%E6%96%97%E7%89%9B/7961223) - 规则
+- [Koishi](https://koishi.chat/)
+- [欢乐斗牛](https://baike.baidu.com/item/%E6%AC%A2%E4%B9%90%E6%96%97%E7%89%9B/7961223)
 
 ## QQ 群
 
