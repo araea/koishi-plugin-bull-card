@@ -155,7 +155,7 @@ export function apply(root: Context, config: Config) {
       if (!bet) return next()
       const { uid, value } = await balanceOf(session.platform, session.userId)
       if (value < bet) {
-        await session.send(reply(session, `${h.at(session.userId)} 余额不足，你只有 ${value}。`))
+        await session.send(reply(session, `${h.at(session.userId)} ⚠️ 余额不足，你只有 ${value}。`))
         return
       }
       await ctx.monetary.cost(uid, bet, config.currencyName)
@@ -166,13 +166,13 @@ export function apply(root: Context, config: Config) {
     round.players.set(session.userId, { userId: session.userId, userName: session.username, bet })
     await track(session.userId, session.username)
     await session.send(reply(session, config.enableMonetary
-      ? `${h.at(session.userId)} 投入 ${bet} 加入赌局！（当前 ${round.players.size} 人）`
-      : `${h.at(session.userId)} 加入成功！当前 ${round.players.size} 人。`))
+      ? `${h.at(session.userId)} ✅ 投入 ${bet} 加入（当前 ${round.players.size} 人）。`
+      : `${h.at(session.userId)} ✅ 加入成功。当前 ${round.players.size} 人。`))
   })
 
   const cmd = ctx.command('bullCard', '斗牛纸牌游戏')
     .action(({ session }) => reply(session, [
-      `🎮 斗牛 · ${config.enableMonetary ? '💰 金币赌注模式' : '🎮 纯娱乐模式'}`,
+      `🃏 斗牛 · ${config.enableMonetary ? '金币赌注模式' : '纯娱乐模式'}`,
       '• bullCard.来一局 — 发起游戏',
       '• bullCard.排行榜 — 查看榜单',
       '• bullCard.强制结束 — 强制重置并退还赌注',
@@ -187,7 +187,7 @@ export function apply(root: Context, config: Config) {
   cmd.subcommand('.来一局', '发起一局斗牛')
     .action(async ({ session }) => {
       const { channelId, userId, username } = session
-      if (rounds.has(channelId)) return reply(session, '🚫 本频道已经有一局在招募了，可用 bullCard.强制结束 重置。')
+      if (rounds.has(channelId)) return reply(session, '⚠️ 本频道已经有一局在招募，可用「bullCard.强制结束」重置。')
 
       const players = new Map<string, Player>()
       // 娱乐模式下发起人直接入座；金币模式还需要发送下注金额
@@ -203,14 +203,14 @@ export function apply(root: Context, config: Config) {
       await track(userId, username)
 
       return reply(session, config.enableMonetary
-        ? `📢 斗牛【金币局】开始！\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送【下注金额】（纯数字）挑战庄家！`
-        : `📢 斗牛【娱乐局】开始！\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送【${config.entryKeyword}】加入游戏！`)
+        ? `✅ 斗牛金币局开始。\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送下注金额（纯数字）挑战庄家。`
+        : `✅ 斗牛娱乐局开始。\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「${config.entryKeyword}」加入游戏。`)
     })
 
   cmd.subcommand('.强制结束', '强制重置本频道的对局', { authority: 2 })
     .action(async ({ session }) => reply(session, await cancel(session.channelId)
-      ? '已重置游戏状态，若有下注已退还。'
-      : '当前没有进行中的对局。'))
+      ? '✅ 已重置游戏状态，若有下注已退还。'
+      : '⚠️ 当前没有进行中的对局。'))
 
   cmd.subcommand('.排行榜 [count:posint]', '查看积分榜')
     .action(async ({ session }, count = 10) => {
@@ -220,12 +220,12 @@ export function apply(root: Context, config: Config) {
         .orderBy(field, 'desc')
         .limit(Math.min(count, 50))
         .execute()
-      if (!list.length) return reply(session, '暂无数据。')
+      if (!list.length) return reply(session, '⚠️ 暂无数据。')
 
       const lines = config.enableMonetary
         ? list.map((p, i) => `${i + 1}. ${p.userName}：${p.earnings >= 0 ? '📈' : '📉'} ${p.earnings}`)
         : list.map((p, i) => `${i + 1}. ${p.userName}（胜 ${p.wins} / 负 ${p.losses}）`)
-      const title = config.enableMonetary ? '💰 斗牛富豪榜（净盈亏）' : '🏆 斗牛胜负榜'
+      const title = config.enableMonetary ? '📋 斗牛富豪榜（净盈亏）' : '📋 斗牛胜负榜'
       return reply(session, [title, ...lines].join('\n'))
     })
 
@@ -238,7 +238,7 @@ export function apply(root: Context, config: Config) {
 
     const players = [...round.players.values()]
     if (!players.length) {
-      await session.send('👥 无人参与，游戏取消。')
+      await session.send('⚠️ 无人参与，游戏取消。')
       return
     }
 
@@ -249,20 +249,20 @@ export function apply(root: Context, config: Config) {
       ? [...players, { userId: botId, userName: `👑 庄家（${session.bot.user?.name || 'Bot'}）`, bet: 0 }]
       : players
 
-    await session.send(`⏰ 截止！共 ${players.length} 人参与${withBot ? '（+Bot）' : ''}，正在发牌…`)
+    await session.send(`⏳ 截止。共 ${players.length} 人参与${withBot ? '（+Bot）' : ''}，正在发牌...`)
 
     const deck = createDeck(seats.length > 5 ? 4 : 2)
     const hands = new Map<Player, Hand>(seats.map((seat) => [seat, evaluate(deck.splice(0, 5) as Card[])]))
 
     if (config.quickMode) {
-      await session.send(['🃏 开牌结果：', '', ...seats.map((seat) => {
+      await session.send(['📋 开牌结果：', '', ...seats.map((seat) => {
         const hand = hands.get(seat)
         return `${seat.userName}：${format(hand.cards)} |【${hand.name}】`
       })].join('\n'))
     } else {
       for (const seat of seats) {
         const hand = hands.get(seat)
-        await session.send(`${seat.userName} 亮牌…\n${format(hand.cards)}\n结果：【${hand.name}】`)
+        await session.send(`${seat.userName} 亮牌...\n${format(hand.cards)}\n结果：${hand.name}`)
         await sleep(config.dealInterval ?? 2000)
       }
     }
@@ -276,7 +276,7 @@ export function apply(root: Context, config: Config) {
         await track(seat.userId, seat.userName, winners.includes(seat) ? { wins: 1 } : { losses: 1 })
       }
       const best = hands.get(top)
-      await session.send(`🎉 最终胜者：${winners.map(name).join(' ')}\n牌型：${best.name}（${best.best.suit}${best.best.rank}）`)
+      await session.send(`✅ 最终胜者：${winners.map(name).join(' ')}\n牌型：${best.name}（${best.best.suit}${best.best.rank}）`)
       return
     }
 
@@ -299,6 +299,6 @@ export function apply(root: Context, config: Config) {
         lines.push(`${name(seat)} 平，退还 ${seat.bet}`)
       }
     }
-    await session.send(['💰 结算清单', '', ...lines].join('\n'))
+    await session.send(['📋 结算清单', '', ...lines].join('\n'))
   }
 }
