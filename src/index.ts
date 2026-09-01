@@ -9,16 +9,16 @@ export const inject = { required: ['database'], optional: ['monetary'] }
 
 export const usage = `## 使用
 
-\`bullCard.来一局\` 发起，等待时间内加入。娱乐模式发送暗号（默认 \`1\`）；金币模式发送下注金额。
+\`bull.来一局\` 发起，等待时间内加入。娱乐模式发送暗号（默认 \`1\`）；金币模式发送下注金额。
 
 ## 指令
 
 | 指令 | 说明 |
 | --- | --- |
-| \`bullCard\` | 查看帮助 |
-| \`bullCard.来一局\` | 发起一局 |
-| \`bullCard.排行榜 [数量]\` | 排行榜 |
-| \`bullCard.强制结束\` | 强制重置（权限 2） |
+| \`bull\` | 查看帮助 |
+| \`bull.来一局\` | 发起一局 |
+| \`bull.排行榜 [数量]\` | 排行榜 |
+| \`bull.强制结束\` | 强制重置（权限 2） |
 
 ## 牌型
 
@@ -169,12 +169,13 @@ export function apply(root: Context, config: Config) {
       : `${h.at(session.userId)} ✅ 加入成功。当前 ${round.players.size} 人。`))
   })
 
-  const cmd = ctx.command('bullCard', '斗牛纸牌游戏')
+  const cmd = ctx.command('bull', '斗牛纸牌游戏')
+    .alias('bullCard')
     .action(({ session }) => reply(session, [
       `🃏 斗牛 · ${config.enableMonetary ? '金币赌注模式' : '纯娱乐模式'}`,
-      '• bullCard.来一局 — 发起游戏',
-      '• bullCard.排行榜 — 查看榜单',
-      '• bullCard.强制结束 — 强制重置并退还赌注',
+      '• bull.来一局 — 发起游戏',
+      '• bull.排行榜 — 查看榜单',
+      '• bull.强制结束 — 强制重置并退还赌注',
       '',
       config.enableMonetary
         ? '💰 规则：Bot 作为庄家，玩家下注与庄家比牌，赢则得回本金加「赌注 × 牌型倍率」。'
@@ -186,7 +187,7 @@ export function apply(root: Context, config: Config) {
   cmd.subcommand('.来一局', '发起一局斗牛')
     .action(async ({ session }) => {
       const { channelId, userId, username } = session
-      if (rounds.has(channelId)) return reply(session, '⚠️ 本频道已经有一局在招募，可用「bullCard.强制结束」重置。')
+      if (rounds.has(channelId)) return reply(session, '⚠️ 本频道已经有一局在招募，可用「bull.强制结束」重置。')
 
       const players = new Map<string, Player>()
       // 娱乐模式下发起人直接入座；金币模式还需要发送下注金额
