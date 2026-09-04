@@ -9,7 +9,7 @@ export const inject = { required: ['database'], optional: ['monetary'] }
 
 export const usage = `## 使用
 
-\`bull.来一局\` 发起，等待时间内加入。娱乐模式发送暗号（默认 \`1\`）；金币模式发送下注金额。
+群聊和私聊均可使用。\`bull.来一局\` 发起，等待时间内加入。娱乐模式发送暗号（默认 \`1\`）；金币模式发送下注金额。
 
 ## 指令
 
@@ -65,7 +65,7 @@ const RULES = `🎴 牌面规则：
 📊 大小：五小牛 > 五花牛 > 四炸 > 牛牛 > 牛九 > … > 牛丁 > 没牛，同型比最大单牌（点数 > 花色）`
 
 export function apply(root: Context, config: Config) {
-  const ctx = root.guild()
+  const ctx = root
   const logger = ctx.logger(name)
   const rounds = new Map<string, Round>()
 
