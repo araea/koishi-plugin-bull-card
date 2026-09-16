@@ -18,7 +18,7 @@ export const usage = `## 使用
 | \`bull\` | 帮助 |
 | \`bull.来一局\` | 发起一局 |
 | \`bull.排行榜 [数量]\` | 排行榜 |
-| \`bull.强制结束\` | 结束当前游戏，权限 2 |
+| \`bull.强制结束\` | 结束当前对局，权限 2 |
 
 ## 牌型
 
@@ -154,7 +154,7 @@ export function apply(root: Context, config: Config) {
       if (!bet) return next()
       const { uid, value } = await balanceOf(session.platform, session.userId)
       if (value < bet) {
-        await session.send(reply(session, `${h.at(session.userId)} ⚠️ 余额不足，你只有 ${value}。`))
+        await session.send(reply(session, `${h.at(session.userId)} ⚠️ 余额不足\n下注 ${bet} 还差 ${bet - value}，当前余额 ${value}。`))
         return
       }
       await ctx.monetary.cost(uid, bet, config.currencyName)
@@ -173,9 +173,9 @@ export function apply(root: Context, config: Config) {
     .alias('bullCard')
     .action(({ session }) => reply(session, [
       `🃏 斗牛 · ${config.enableMonetary ? '金币赌注模式' : '纯娱乐模式'}`,
-      '• bull.来一局 — 发起游戏',
+      '• bull.来一局 — 发起一局',
       '• bull.排行榜 — 查看榜单',
-      '• bull.强制结束 — 强制重置并退还赌注',
+      '• bull.强制结束 — 重置对局并退还赌注',
       '',
       config.enableMonetary
         ? '💰 规则：Bot 作为庄家，玩家下注与庄家比牌，赢则得回本金加「赌注 × 牌型倍率」。'
@@ -187,7 +187,7 @@ export function apply(root: Context, config: Config) {
   cmd.subcommand('.来一局', '发起一局斗牛')
     .action(async ({ session }) => {
       const { channelId, userId, username } = session
-      if (rounds.has(channelId)) return reply(session, '⚠️ 本频道已经有一局在招募，可用「bull.强制结束」重置。')
+      if (rounds.has(channelId)) return reply(session, '⚠️ 本频道已经有一局在招募\n发送「bull.强制结束」重置，再开新的。')
 
       const players = new Map<string, Player>()
       // 娱乐模式下发起人直接入座；金币模式还需要发送下注金额
@@ -207,10 +207,10 @@ export function apply(root: Context, config: Config) {
         : `✅ 斗牛娱乐局开始。\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「${config.entryKeyword}」加入游戏。`)
     })
 
-  cmd.subcommand('.强制结束', '强制重置本频道的对局', { authority: 2 })
+  cmd.subcommand('.强制结束', '重置本频道的对局', { authority: 2 })
     .action(async ({ session }) => reply(session, await cancel(session.channelId)
-      ? '✅ 已重置游戏状态，若有下注已退还。'
-      : '⚠️ 当前没有进行中的对局。'))
+      ? '✅ 已重置本频道的对局，下注已退还。'
+      : '💡 本频道没有进行中的对局。\n发送「bull.来一局」发起一局。'))
 
   cmd.subcommand('.排行榜 [count:posint]', '查看积分榜')
     .action(async ({ session }, count = 10) => {
@@ -220,7 +220,7 @@ export function apply(root: Context, config: Config) {
         .orderBy(field, 'desc')
         .limit(Math.min(count, 50))
         .execute()
-      if (!list.length) return reply(session, '⚠️ 暂无数据。')
+      if (!list.length) return reply(session, '📋 排行榜还空着\n第一个坐上牌桌的人，名字会写在这里。\n发送「bull.来一局」发起一局。')
 
       const lines = config.enableMonetary
         ? list.map((p, i) => `${i + 1}. ${p.userName}：${p.earnings >= 0 ? '📈' : '📉'} ${p.earnings}`)
@@ -238,7 +238,7 @@ export function apply(root: Context, config: Config) {
 
     const players = [...round.players.values()]
     if (!players.length) {
-      await session.send('⚠️ 无人参与，游戏取消。')
+      await session.send('💡 无人入座，这一局作罢。\n发送「bull.来一局」再发起一次。')
       return
     }
 
@@ -249,7 +249,7 @@ export function apply(root: Context, config: Config) {
       ? [...players, { userId: botId, userName: `👑 庄家（${session.bot.user?.name || 'Bot'}）`, bet: 0 }]
       : players
 
-    await session.send(`⏳ 截止。共 ${players.length} 人参与${withBot ? '（+Bot）' : ''}，正在发牌...`)
+    await session.send(`⏳ 招募截止 · 共 ${players.length} 人入座${withBot ? '（含 Bot）' : ''}\n正在发牌……`)
 
     const deck = createDeck(seats.length > 5 ? 4 : 2)
     const hands = new Map<Player, Hand>(seats.map((seat) => [seat, evaluate(deck.splice(0, 5) as Card[])]))
@@ -257,12 +257,12 @@ export function apply(root: Context, config: Config) {
     if (config.quickMode) {
       await session.send(['📋 开牌结果：', '', ...seats.map((seat) => {
         const hand = hands.get(seat)
-        return `${seat.userName}：${format(hand.cards)} |【${hand.name}】`
+        return `${seat.userName}：${format(hand.cards)} · ${hand.name}`
       })].join('\n'))
     } else {
       for (const seat of seats) {
         const hand = hands.get(seat)
-        await session.send(`${seat.userName} 亮牌...\n${format(hand.cards)}\n结果：${hand.name}`)
+        await session.send(`${seat.userName} 亮牌……\n${format(hand.cards)}\n结果：${hand.name}`)
         await sleep(config.dealInterval ?? 2000)
       }
     }
@@ -276,7 +276,7 @@ export function apply(root: Context, config: Config) {
         await track(seat.userId, seat.userName, winners.includes(seat) ? { wins: 1 } : { losses: 1 })
       }
       const best = hands.get(top)
-      await session.send(`✅ 最终胜者：${winners.map(name).join(' ')}\n牌型：${best.name}（${best.best.suit}${best.best.rank}）`)
+      await session.send(`🏆 最终胜者：${winners.map(name).join(' ')}\n牌型：${best.name}（${best.best.suit}${best.best.rank}）`)
       return
     }
 
