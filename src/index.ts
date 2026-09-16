@@ -18,7 +18,7 @@ export const usage = `## 使用
 | \`bull\` | 帮助 |
 | \`bull.来一局\` | 发起一局 |
 | \`bull.排行榜 [数量]\` | 排行榜 |
-| \`bull.强制结束\` | 结束当前对局，权限 2 |
+| \`bull.结束\` | 结束当前对局，权限 2 |
 
 ## 牌型
 
@@ -175,7 +175,7 @@ export function apply(root: Context, config: Config) {
       `🃏 斗牛 · ${config.enableMonetary ? '金币赌注模式' : '纯娱乐模式'}`,
       '• bull.来一局 — 发起一局',
       '• bull.排行榜 — 查看榜单',
-      '• bull.强制结束 — 重置对局并退还赌注',
+      '• bull.结束 — 重置对局并退还赌注',
       '',
       config.enableMonetary
         ? '💰 规则：Bot 作为庄家，玩家下注与庄家比牌，赢则得回本金加「赌注 × 牌型倍率」。'
@@ -187,7 +187,7 @@ export function apply(root: Context, config: Config) {
   cmd.subcommand('.来一局', '发起一局斗牛')
     .action(async ({ session }) => {
       const { channelId, userId, username } = session
-      if (rounds.has(channelId)) return reply(session, '⚠️ 本频道已经有一局在招募\n发送「bull.强制结束」重置，再开新的。')
+      if (rounds.has(channelId)) return reply(session, '⚠️ 本频道已经有一局在招募\n发送「bull.结束」重置，再开新的。')
 
       const players = new Map<string, Player>()
       // 娱乐模式下发起人直接入座；金币模式还需要发送下注金额
@@ -207,7 +207,7 @@ export function apply(root: Context, config: Config) {
         : `✅ 斗牛娱乐局开始。\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「${config.entryKeyword}」加入游戏。`)
     })
 
-  cmd.subcommand('.强制结束', '重置本频道的对局', { authority: 2 })
+  cmd.subcommand('.结束', '重置本频道的对局', { authority: 2 })
     .action(async ({ session }) => reply(session, await cancel(session.channelId)
       ? '✅ 已重置本频道的对局，下注已退还。'
       : '💡 本频道没有进行中的对局。\n发送「bull.来一局」发起一局。'))
