@@ -212,7 +212,7 @@ export function apply(root: Context, config: Config) {
       ? '✅ 已重置本频道的对局，下注已退还。'
       : '💡 本频道没有进行中的对局。\n发送「bull.来一局」发起一局。'))
 
-  cmd.subcommand('.排行榜 [count:posint]', '查看积分榜')
+  cmd.subcommand('.排行榜 [count:posint]', '查看积分排行榜')
     .action(async ({ session }, count = 10) => {
       const field = config.enableMonetary ? 'earnings' : 'wins'
       const list = await ctx.database
