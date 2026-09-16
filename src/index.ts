@@ -167,6 +167,17 @@ export function apply(root: Context, config: Config) {
         return reply(session, '💡 这一局刚刚收场\n发送「bull.来一局」发起新的一局。')
       }
       if (config.enableMonetary) await ctx.monetary.cost(uid, bet, config.currencyName)
+      // 扣款期间结算或重置插进来时这一局已经作废，人进不去，钱要还回去
+      if (!rounds.has(session.channelId) || round.closed) {
+        if (config.enableMonetary) {
+          try {
+            await ctx.monetary.gain(uid, bet, config.currencyName)
+          } catch (error) {
+            logger.error('退还 %s 的 %d 失败：%s', session.userId, bet, error.message)
+          }
+        }
+        return reply(session, '💡 这一局刚刚收场\n发送「bull.来一局」发起新的一局。')
+      }
       round.players.set(session.userId, { userId: session.userId, userName: session.username, bet })
       await track(session.userId, session.username)
       return reply(session, config.enableMonetary
@@ -226,7 +237,7 @@ export function apply(root: Context, config: Config) {
     .userFields(['id', 'name', 'authority'])
     .action(async ({ session }) => {
       const round = rounds.get(session.channelId)
-      if (!round) return reply(session, '💡 本频道没有进行中的对局。\n发送「bull.来一局」发起一局。')
+      if (!round) return reply(session, '💡 本频道没有进行中的对局\n发送「bull.来一局」发起一局。')
       const authority = session.user?.authority ?? 0
       if (session.userId !== round.ownerId && authority < 2) {
         return reply(session, '⚠️ 权限不够\n只有发起者或权限 2 以上的人能重置这一局。')
@@ -239,6 +250,7 @@ export function apply(root: Context, config: Config) {
     .action(async ({ session }, bet) => {
       const round = rounds.get(session.channelId)
       if (!round || round.closed) return reply(session, '💡 本频道没有在招募的对局\n发送「bull.来一局」发起一局。')
+      if (round.players.has(session.userId)) return reply(session, '⏳ 你已经在牌桌上\n等这一局开牌。')
       if (config.enableMonetary && !bet) return reply(session, '⚠️ 金币模式要写下注金额\n例：「bull.加入 100」。')
       const result = await joinRound(session, bet)
       return result ?? reply(session, '💡 这一局刚刚收场\n发送「bull.来一局」发起新的一局。')
@@ -254,10 +266,13 @@ export function apply(root: Context, config: Config) {
         .execute()
       if (!list.length) return reply(session, '📋 排行榜还空着\n第一个坐上牌桌的人，名字会写在这里。\n发送「bull.来一局」发起一局。')
 
+      const shown = list.slice(0, 4)
       const lines = config.enableMonetary
-        ? list.map((p, i) => `${i + 1}. ${p.userName}：${p.earnings >= 0 ? '📈' : '📉'} ${p.earnings}`)
-        : list.map((p, i) => `${i + 1}. ${p.userName}（胜 ${p.wins} / 负 ${p.losses}）`)
-      const title = config.enableMonetary ? '📋 斗牛富豪榜（净盈亏）' : '📋 斗牛胜负榜'
+        ? shown.map((p, i) => `${i + 1}. ${p.userName}：${p.earnings >= 0 ? '📈' : '📉'} ${p.earnings}`)
+        : shown.map((p, i) => `${i + 1}. ${p.userName}（胜 ${p.wins} / 负 ${p.losses}）`)
+      const hidden = list.length - shown.length
+      if (hidden > 0) lines.push(`…… 另有 ${hidden} 人未列`)
+      const title = config.enableMonetary ? '📋 斗牛富豪排行榜（净盈亏）' : '📋 斗牛胜负排行榜'
       return reply(session, [title, ...lines].join('\n'))
     })
 
@@ -270,7 +285,7 @@ export function apply(root: Context, config: Config) {
 
     const players = [...round.players.values()]
     if (!players.length) {
-      await session.send('💡 无人入座，这一局作罢。\n发送「bull.来一局」再发起一次。')
+      await session.send('💡 无人入座，这一局作罢\n发送「bull.来一局」再发起一次。')
       return
     }
 
