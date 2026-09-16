@@ -17,12 +17,15 @@ export const usage = `## 使用
 | --- | --- |
 | \`bull\` | 帮助 |
 | \`bull.来一局\` | 发起一局 |
+| \`bull.加入 [金额]\` | 加入招募中的对局，金币模式需带上金额 |
 | \`bull.排行榜 [数量]\` | 排行榜 |
-| \`bull.结束\` | 结束当前对局，权限 2 |
+| \`bull.结束\` | 重置本频道的对局，发起者或权限 2 |
 
 ## 牌型
 
 每人五张牌。J、Q、K 计 10 点，A 计 1 点；任取三张凑成 10 的倍数后，余数为牛几，牛牛为 10 点，凑不出称为没牛。四炸、五花牛、五小牛为特殊牌型。
+
+大小：五小牛 > 五花牛 > 四炸 > 牛牛 > 牛九 > …… > 牛丁 > 没牛，同型比最大单牌，点数相同比花色。
 
 金币模式赔率：五小牛、五花牛、四炸 ×4，牛牛 ×3，牛七至牛九 ×2，其余 ×1。`
 
@@ -50,19 +53,12 @@ interface Player {
 /** 一局招募中的对局，仅存在于内存里：进程退出即退款，不会留下僵尸状态。 */
 interface Round {
   platform: string
+  /** 发起这一局的人；重置他人对局要卡在这里。 */
+  ownerId: string
   players: Map<string, Player>
   dispose: () => void
   closed: boolean
 }
-
-const RULES = `🎴 牌面规则：
-• 每人五张牌，任选三张凑成 10 的倍数
-• 余下两张的和取模 10 即为「牛几」，整除则为牛牛
-• JQK 计 10，A 计 1，其余按牌面
-• 凑不出 10 的倍数即为「没牛」
-
-🌟 特殊牌型：四张同点为四炸，全是 JQK 为五花牛，全部小于 5 且总和不超过 10 为五小牛
-📊 大小：五小牛 > 五花牛 > 四炸 > 牛牛 > 牛九 > … > 牛丁 > 没牛，同型比最大单牌（点数 > 花色）`
 
 export function apply(root: Context, config: Config) {
   const ctx = root
@@ -140,49 +136,67 @@ export function apply(root: Context, config: Config) {
     })
   }
 
+  /** 招募期的加入锁：扣款与入座之间可能被结算插队。 */
+  const joining = new Set<string>()
+
+  /**
+   * 加入当前招募中的对局。返回 null 表示这条消息不属于本插件。
+   * 娱乐模式忽略金额，金币模式的金额由裸词或参数给出。
+   */
+  async function joinRound(session: Session, amount?: number): Promise<h.Fragment | null> {
+    const round = rounds.get(session.channelId)
+    if (!round || round.closed) return null
+
+    let bet = 0
+    let uid = 0
+    if (config.enableMonetary) {
+      if (!amount || amount <= 0) return null
+      bet = amount
+      const balance = await balanceOf(session.platform, session.userId)
+      uid = balance.uid
+      if (balance.value < bet) {
+        return reply(session, `${h.at(session.userId)} ⚠️ 余额不足\n下注 ${bet} 还差 ${bet - balance.value}，当前余额 ${balance.value}。`)
+      }
+    }
+
+    if (joining.has(session.channelId)) return reply(session, '⏳ 正在处理上一位加入，稍后再发。')
+    joining.add(session.channelId)
+    try {
+      // 读余额到扣款之间这一局可能已经结算，扣款前再确认一次
+      if (!rounds.has(session.channelId) || round.closed) {
+        return reply(session, '💡 这一局刚刚收场\n发送「bull.来一局」发起新的一局。')
+      }
+      if (config.enableMonetary) await ctx.monetary.cost(uid, bet, config.currencyName)
+      round.players.set(session.userId, { userId: session.userId, userName: session.username, bet })
+      await track(session.userId, session.username)
+      return reply(session, config.enableMonetary
+        ? `${h.at(session.userId)} ✅ 投入 ${bet} 加入（当前 ${round.players.size} 人）。`
+        : `${h.at(session.userId)} ✅ 加入成功。当前 ${round.players.size} 人。`)
+    } finally {
+      joining.delete(session.channelId)
+    }
+  }
+
   // 招募期间监听加入消息；不在招募中的频道只做一次 Map 查询，不碰数据库
   ctx.middleware(async (session, next) => {
+    if (!config.enableDirectInput) return next()
     const round = rounds.get(session.channelId)
     if (!round || round.closed) return next()
     const content = session.content?.trim()
     if (!content || round.players.has(session.userId)) return next()
 
-    let bet = 0
-    if (config.enableMonetary) {
-      if (!/^\d+$/.test(content)) return next()
-      bet = +content
-      if (!bet) return next()
-      const { uid, value } = await balanceOf(session.platform, session.userId)
-      if (value < bet) {
-        await session.send(reply(session, `${h.at(session.userId)} ⚠️ 余额不足\n下注 ${bet} 还差 ${bet - value}，当前余额 ${value}。`))
-        return
-      }
-      await ctx.monetary.cost(uid, bet, config.currencyName)
-    } else if (content !== config.entryKeyword) {
-      return next()
-    }
+    // 金币模式只认纯数字，娱乐模式只认暗号；其余交给别的插件
+    const monetary = config.enableMonetary
+    if (monetary ? !/^[1-9]\d*$/.test(content) : content !== config.entryKeyword) return next()
 
-    round.players.set(session.userId, { userId: session.userId, userName: session.username, bet })
-    await track(session.userId, session.username)
-    await session.send(reply(session, config.enableMonetary
-      ? `${h.at(session.userId)} ✅ 投入 ${bet} 加入（当前 ${round.players.size} 人）。`
-      : `${h.at(session.userId)} ✅ 加入成功。当前 ${round.players.size} 人。`))
+    const reply = await joinRound(session, monetary ? +content : undefined)
+    if (!reply) return next()
+    await session.send(reply)
   })
 
   const cmd = ctx.command('bull', '斗牛纸牌游戏')
     .alias('bullCard')
-    .action(({ session }) => reply(session, [
-      `🃏 斗牛 · ${config.enableMonetary ? '金币赌注模式' : '纯娱乐模式'}`,
-      '• bull.来一局 — 发起一局',
-      '• bull.排行榜 — 查看榜单',
-      '• bull.结束 — 重置对局并退还赌注',
-      '',
-      config.enableMonetary
-        ? '💰 规则：Bot 作为庄家，玩家下注与庄家比牌，赢则得回本金加「赌注 × 牌型倍率」。'
-        : '📋 规则：玩家之间互相比牌，最大者胜。只有一人参与时 Bot 会下场陪练。',
-      '',
-      RULES,
-    ].join('\n')))
+    .action(({ session }) => session.execute('help bull'))
 
   cmd.subcommand('.来一局', '发起一局斗牛')
     .action(async ({ session }) => {
@@ -195,6 +209,7 @@ export function apply(root: Context, config: Config) {
 
       const round: Round = {
         platform: session.platform,
+        ownerId: userId,
         players,
         closed: false,
         dispose: ctx.setTimeout(() => settle(session), config.waitTimeout * 1000),
@@ -203,14 +218,31 @@ export function apply(root: Context, config: Config) {
       await track(userId, username)
 
       return reply(session, config.enableMonetary
-        ? `✅ 斗牛金币局开始。\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送下注金额（纯数字）挑战庄家。`
-        : `✅ 斗牛娱乐局开始。\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「${config.entryKeyword}」加入游戏。`)
+        ? `✅ 斗牛金币局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送下注金额（纯数字）挑战庄家。`
+        : `✅ 斗牛娱乐局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「${config.entryKeyword}」加入对局。`)
     })
 
-  cmd.subcommand('.结束', '重置本频道的对局', { authority: 2 })
-    .action(async ({ session }) => reply(session, await cancel(session.channelId)
-      ? '✅ 已重置本频道的对局，下注已退还。'
-      : '💡 本频道没有进行中的对局。\n发送「bull.来一局」发起一局。'))
+  cmd.subcommand('.结束', '重置本频道的对局')
+    .userFields(['id', 'name', 'authority'])
+    .action(async ({ session }) => {
+      const round = rounds.get(session.channelId)
+      if (!round) return reply(session, '💡 本频道没有进行中的对局。\n发送「bull.来一局」发起一局。')
+      const authority = session.user?.authority ?? 0
+      if (session.userId !== round.ownerId && authority < 2) {
+        return reply(session, '⚠️ 权限不够\n只有发起者或权限 2 以上的人能重置这一局。')
+      }
+      await cancel(session.channelId)
+      return reply(session, '✅ 已重置本频道的对局，下注已退还。')
+    })
+
+  cmd.subcommand('.加入 [bet:posint]', '加入招募中的对局')
+    .action(async ({ session }, bet) => {
+      const round = rounds.get(session.channelId)
+      if (!round || round.closed) return reply(session, '💡 本频道没有在招募的对局\n发送「bull.来一局」发起一局。')
+      if (config.enableMonetary && !bet) return reply(session, '⚠️ 金币模式要写下注金额\n例：「bull.加入 100」。')
+      const result = await joinRound(session, bet)
+      return result ?? reply(session, '💡 这一局刚刚收场\n发送「bull.来一局」发起新的一局。')
+    })
 
   cmd.subcommand('.排行榜 [count:posint]', '查看积分排行榜')
     .action(async ({ session }, count = 10) => {

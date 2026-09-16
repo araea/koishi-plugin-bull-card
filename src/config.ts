@@ -5,6 +5,7 @@ export interface Config {
   currencyName?: string
   waitTimeout: number
   entryKeyword: string
+  enableDirectInput: boolean
   quickMode: boolean
   dealInterval?: number
   atReply: boolean
@@ -28,7 +29,9 @@ export const Config: Schema<Config> = Schema.intersect([
 
   Schema.object({
     waitTimeout: Schema.natural().min(5).default(10).description('等待玩家加入的时间（秒）。'),
-    entryKeyword: Schema.string().default('1').description('加入游戏的暗号，仅娱乐模式有效。'),
+    entryKeyword: Schema.string().default('1').description('加入对局的暗号，仅娱乐模式有效。'),
+    enableDirectInput: Schema.boolean().default(true)
+      .description('对局中直接发送暗号或下注金额即可加入，无需指令前缀。'),
   }).description('游戏设置'),
 
   Schema.intersect([
