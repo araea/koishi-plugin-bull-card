@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-bull-card",
   "description": "Koishi 斗牛牌局：支持娱乐与货币下注模式。",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
