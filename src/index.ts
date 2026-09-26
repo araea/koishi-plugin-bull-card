@@ -1,3 +1,6 @@
+import { registerDirectInput, directInputConflict } from './ux'
+import { createPayments } from './payments'
+import { usePresentation } from './ux'
 import { Context, Session, h, sleep } from 'koishi'
 import {} from 'koishi-plugin-monetary'
 import { Card, compare, createDeck, evaluate, format, Hand, multiplier } from './cards'
@@ -61,9 +64,12 @@ interface Round {
 }
 
 export function apply(root: Context, config: Config) {
+  const presentation = usePresentation(root, 'bull')
   const ctx = root
   const logger = ctx.logger(name)
   const rounds = new Map<string, Round>()
+  const payments = createPayments(ctx, 'bull')
+  const payout = (platform: string, userId: string, uid: number, amount: number) => payments.pay(platform, userId, amount, config.currencyName, () => ctx.monetary.gain(uid, amount, config.currencyName))
 
   ctx.model.extend('bull_card_rank', {
     userId: 'string',
@@ -94,23 +100,21 @@ export function apply(root: Context, config: Config) {
   }
 
   async function refund(round: Round) {
+    let success = true
     for (const { userId, bet } of round.players.values()) {
       if (bet <= 0) continue
-      try {
-        await ctx.monetary.gain(await uidOf(round.platform, userId), bet, config.currencyName)
-      } catch (error) {
-        logger.error('退还 %s 的 %d 失败：%s', userId, bet, error.message)
-      }
+      if (!await payout(round.platform, userId, await uidOf(round.platform, userId), bet)) success = false
     }
+    return success
   }
 
   async function cancel(channelId: string) {
     const round = rounds.get(channelId)
     if (!round) return false
+    round.closed = true
     rounds.delete(channelId)
     round.dispose()
-    if (config.enableMonetary) await refund(round)
-    return true
+    return config.enableMonetary ? refund(round) : true
   }
 
   // 插件停用时把还没开牌的赌注还回去
@@ -171,7 +175,7 @@ export function apply(root: Context, config: Config) {
       if (!rounds.has(session.channelId) || round.closed) {
         if (config.enableMonetary) {
           try {
-            await ctx.monetary.gain(uid, bet, config.currencyName)
+            if (!await payout(session.platform, session.userId, uid, bet)) return reply(session, '对局已收场，退款尚未确认。请联系管理员使用「bull.待核对」核对入账。')
           } catch (error) {
             logger.error('退还 %s 的 %d 失败：%s', session.userId, bet, error.message)
           }
@@ -189,6 +193,21 @@ export function apply(root: Context, config: Config) {
   }
 
   // 招募期间监听加入消息；不在招募中的频道只做一次 Map 查询，不碰数据库
+  registerDirectInput(ctx, 'bull-card', async (session) => {
+    if (!ctx.filter(session)) return false;
+    if (!config.enableDirectInput) return false
+    const round = rounds.get(session.channelId)
+    if (!round || round.closed) return false
+    const content = session.content?.trim()
+    if (!content || round.players.has(session.userId)) return false
+
+    // 金币模式只认纯数字，娱乐模式只认暗号；其余交给别的插件
+    const monetary = config.enableMonetary
+    if (monetary ? !/^[1-9]\d*$/.test(content) : content !== config.entryKeyword) return false
+
+    return true
+  });
+
   ctx.middleware(async (session, next) => {
     if (!config.enableDirectInput) return next()
     const round = rounds.get(session.channelId)
@@ -200,6 +219,7 @@ export function apply(root: Context, config: Config) {
     const monetary = config.enableMonetary
     if (monetary ? !/^[1-9]\d*$/.test(content) : content !== config.entryKeyword) return next()
 
+    if (await directInputConflict(ctx, session)) return;
     const reply = await joinRound(session, monetary ? +content : undefined)
     if (!reply) return next()
     await session.send(reply)
@@ -229,9 +249,19 @@ export function apply(root: Context, config: Config) {
       await track(userId, username)
 
       return reply(session, config.enableMonetary
-        ? `✅ 斗牛金币局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送下注金额（纯数字）挑战庄家。`
-        : `✅ 斗牛娱乐局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「${config.entryKeyword}」加入对局。`)
+        ? `✅ 斗牛金币局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「bull.加入 金额」挑战庄家。发起者可发送「bull.延长」延长等待。`
+        : `✅ 斗牛娱乐局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「bull.加入」加入对局。发起者可发送「bull.延长」延长等待。`)
     })
+
+  cmd.subcommand('.延长', '发起者延长招募等待').action(({session}) => {
+    const round = rounds.get(session.channelId)
+    if (!round || round.closed) return '当前没有招募中的对局。'
+    if (round.ownerId !== session.userId) return '只有发起者可以延长招募。'
+    round.dispose()
+    const seconds = Math.max(30, config.waitTimeout)
+    round.dispose = ctx.setTimeout(() => settle(session), seconds * 1000)
+    return `已重新计时，招募将在 ${seconds} 秒后结束。`
+  })
 
   cmd.subcommand('.结束', '重置本频道的对局')
     .userFields(['id', 'name', 'authority'])
@@ -242,7 +272,8 @@ export function apply(root: Context, config: Config) {
       if (session.userId !== round.ownerId && authority < 2) {
         return reply(session, '⚠️ 权限不够\n只有发起者或权限 2 以上的人能重置这一局。')
       }
-      await cancel(session.channelId)
+      const refunded = await cancel(session.channelId)
+      if (!refunded) return reply(session, '对局已结束，部分退款尚未确认。请联系管理员使用「bull.待核对」核对入账。')
       return reply(session, '✅ 已重置本频道的对局，下注已退还。')
     })
 
@@ -266,7 +297,7 @@ export function apply(root: Context, config: Config) {
         .execute()
       if (!list.length) return reply(session, '📋 排行榜还空着\n第一个坐上牌桌的人，名字会写在这里。\n发送「bull.来一局」发起一局。')
 
-      const shown = list.slice(0, 4)
+      const shown = list
       const lines = config.enableMonetary
         ? shown.map((p, i) => `${i + 1}. ${p.userName}：${p.earnings >= 0 ? '📈' : '📉'} ${p.earnings}`)
         : shown.map((p, i) => `${i + 1}. ${p.userName}（胜 ${p.wins} / 负 ${p.losses}）`)
@@ -335,15 +366,15 @@ export function apply(root: Context, config: Config) {
       if (diff > 0) {
         const rate = multiplier(hands.get(seat).score)
         const profit = Math.floor(seat.bet * rate)
-        await ctx.monetary.gain(uid, seat.bet + profit, config.currencyName)
+        const paid = await payout(round.platform, seat.userId, uid, seat.bet + profit)
         await track(seat.userId, seat.userName, { wins: 1, earnings: profit })
-        lines.push(`${name(seat)} 胜（x${rate}），赚取 ${profit}`)
+        lines.push(`${name(seat)} 胜（x${rate}），应得利润 ${profit}${paid ? "（已入账）" : "（入账待核对，请联系管理员）"}`)
       } else if (diff < 0) {
         await track(seat.userId, seat.userName, { losses: 1, earnings: -seat.bet })
         lines.push(`${name(seat)} 败，失去 ${seat.bet}`)
       } else {
-        await ctx.monetary.gain(uid, seat.bet, config.currencyName)
-        lines.push(`${name(seat)} 平，退还 ${seat.bet}`)
+        const paid = await payout(round.platform, seat.userId, uid, seat.bet)
+        lines.push(`${name(seat)} 平，${paid ? "已退还" : "待核对退款"} ${seat.bet}`)
       }
     }
     await session.send(['📋 结算清单', '', ...lines].join('\n'))
