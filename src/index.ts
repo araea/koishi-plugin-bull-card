@@ -1,6 +1,5 @@
 import { registerDirectInput, directInputConflict } from './ux'
 import { createPayments } from './payments'
-import { usePresentation } from './ux'
 import { Context, Session, h, sleep } from 'koishi'
 import {} from 'koishi-plugin-monetary'
 import { Card, compare, createDeck, evaluate, format, Hand, multiplier } from './cards'
@@ -64,10 +63,13 @@ interface Round {
 }
 
 export function apply(root: Context, config: Config) {
-  const presentation = usePresentation(root, 'bull')
   const ctx = root
   const logger = ctx.logger(name)
   const rounds = new Map<string, Round>()
+  // 主指令必须先于 payments 的子指令注册，否则 Koishi 会丢掉它的描述
+  const cmd = ctx.command('bull', '斗牛纸牌游戏')
+    .alias('bullCard')
+    .action(({ session }) => session.execute('help bull'))
   const payments = createPayments(ctx, 'bull')
   const payout = (platform: string, userId: string, uid: number, amount: number) => payments.pay(platform, userId, amount, config.currencyName, () => ctx.monetary.gain(uid, amount, config.currencyName))
 
@@ -225,10 +227,6 @@ export function apply(root: Context, config: Config) {
     await session.send(reply)
   })
 
-  const cmd = ctx.command('bull', '斗牛纸牌游戏')
-    .alias('bullCard')
-    .action(({ session }) => session.execute('help bull'))
-
   cmd.subcommand('.来一局', '发起一局斗牛')
     .action(async ({ session }) => {
       const { channelId, userId, username } = session
@@ -249,19 +247,9 @@ export function apply(root: Context, config: Config) {
       await track(userId, username)
 
       return reply(session, config.enableMonetary
-        ? `✅ 斗牛金币局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「bull.加入 金额」挑战庄家。发起者可发送「bull.延长」延长等待。`
-        : `✅ 斗牛娱乐局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「bull.加入」加入对局。发起者可发送「bull.延长」延长等待。`)
+        ? `✅ 斗牛金币局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「bull.加入 金额」挑战庄家。`
+        : `✅ 斗牛娱乐局开始\n发起人：${username}\n请在 ${config.waitTimeout} 秒内发送「bull.加入」加入对局。`)
     })
-
-  cmd.subcommand('.延长', '发起者延长招募等待').action(({session}) => {
-    const round = rounds.get(session.channelId)
-    if (!round || round.closed) return '当前没有招募中的对局。'
-    if (round.ownerId !== session.userId) return '只有发起者可以延长招募。'
-    round.dispose()
-    const seconds = Math.max(30, config.waitTimeout)
-    round.dispose = ctx.setTimeout(() => settle(session), seconds * 1000)
-    return `已重新计时，招募将在 ${seconds} 秒后结束。`
-  })
 
   cmd.subcommand('.结束', '重置本频道的对局')
     .userFields(['id', 'name', 'authority'])
