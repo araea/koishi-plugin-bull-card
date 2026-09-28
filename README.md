@@ -1,6 +1,6 @@
 # 斗牛
 
-Koishi 斗牛牌局插件，支持娱乐模式与货币下注模式
+Koishi 插件：斗牛牌局，支持娱乐比牌与金币下注两种模式
 
 [![GitHub](https://img.shields.io/badge/GitHub-仓库-181717)](https://github.com/araea/koishi-plugin-bull-card)
 [![npm](https://img.shields.io/badge/npm-包-CB3837)](https://www.npmjs.com/package/koishi-plugin-bull-card)
