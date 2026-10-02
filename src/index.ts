@@ -1,5 +1,6 @@
 import { registerDirectInput, directInputConflict } from './ux'
 import { createPayments } from './payments'
+import { helpOf } from './help'
 import { Context, Session, h, sleep } from 'koishi'
 import {} from 'koishi-plugin-monetary'
 import { Card, compare, createDeck, evaluate, format, Hand, multiplier } from './cards'
@@ -69,7 +70,11 @@ export function apply(root: Context, config: Config) {
   // 主指令必须先于 payments 的子指令注册，否则 Koishi 会丢掉它的描述
   const cmd = ctx.command('bull', '斗牛纸牌游戏')
     .alias('bullCard')
-    .action(({ session }) => session.execute('help bull'))
+    .userFields(['authority'])
+    .action(async ({ session }) => {
+      const { title, entries } = await helpOf(session, 'bull', ['来一局', '加入', '结束', '排行榜'].map((name) => `bull.${name}`))
+      return reply(session, [`📋 ${title}`, ...entries.map(({ name, description }) => `${name} · ${description}`), '发送「bull.来一局」发起一局，招募期内发送「bull.加入」入局。'].join('\n'))
+    })
   const payments = createPayments(ctx, 'bull')
   const payout = (platform: string, userId: string, uid: number, amount: number) => payments.pay(platform, userId, amount, config.currencyName, () => ctx.monetary.gain(uid, amount, config.currencyName))
 
